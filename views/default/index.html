@@ -1,0 +1,163 @@
+{{left_sidebar_enabled,right_sidebar_enabled=False,('message' in globals())}}
+{{extend 'layout.html'}}
+
+{{if 'message' in globals():}}
+<h3>{{=message}}</h3>
+
+<form>
+    <table border=0>
+        <tr>
+        <td valign="top"><svg style="width: 1024; height: 768;"></svg></td>
+        </tr>
+    </table>
+    <br/>
+    <br/>
+    <!--br/>
+    {{if filetable:}}
+    {{=filetable}}
+    {{pass}}
+    <br/>
+    {{=TEXTAREA('<hello>', XML('<b>world</b>'), _class='test')}}
+    -->
+</form>
+
+<script>
+var width = 1024;
+var height = 768;
+
+// gets the JSON object miserable from the server side
+var graph = {{=XML(response.json(wikidata))}};
+// var fn = encodeURI('{{=join(pages_dir, "Acrophyseter")}}');
+// var dt = "";
+// function displaytext(text){
+//         dt = text;
+// }
+// d3.text(fn, displaytext);
+
+
+
+var color = d3.scale.category20();
+
+var force = d3.layout.force()
+    .charge(-120)
+    .linkDistance( function(d) { return (d.value*30) } )
+    .linkStrength( function(d) { return (1/(1+d.value)) } )
+    .size([width, height]);
+
+// selects the existing svg object in the page
+var svg = d3.select("svg");
+
+force
+    .nodes(graph.nodes)
+    .links(graph.links)
+    .start();
+
+var edges = svg.selectAll(".link")
+    .data(graph.links)
+	.enter().append("line")
+	.attr("class", "link")
+	.style("stroke-width", function(d) { return (d.value); });
+
+var gnodes = svg.selectAll('g.gnode')
+	.data(graph.nodes)
+	.enter()
+	.append('g')
+	.classed('gnode', true)
+    .append("a")
+    .attr("xlink:href", function(d) {
+        if (d.group == 2) {// for pages
+            return "{{=URL('visualizepage')}}?p=" + d.name + "&docid=" + d.docid;
+        }
+        else {
+            return "http://en.wikipedia.org/wiki/" + d.name;
+        }
+    })
+    .attr("target", "_blank");
+//     .append("a")
+//     .attr("xlink:href", function(d) {return "http://en.wikipedia.org/wiki/" + d.name})
+//     .attr("target", "_blank");
+
+var nodeCircles = gnodes.append("circle")
+	.attr("class", "node")
+	.on("mouseover", mouseover)
+    .on("mouseout", mouseout)
+    .on('click', mouseclick)
+	.attr("r" , function(d) { return d.size * 15; })
+    .style('cursor', 'pointer')
+	.style("fill", function(d) { return color(d.group); })
+	.call(force.drag);
+
+var nodeLabels = gnodes.append("text")
+    .style("text-anchor", "middle")
+    .style("display", "none")
+    .style('fill', 'blue')
+    .style('font-size', 12)
+	.text(function(d) { return d.name; });
+
+// console.log(nodeLabels);
+
+force.on("tick", function() {
+
+    edges.attr("x1", function(d) { return d.source.x; })
+        .attr("y1", function(d) { return d.source.y; })
+        .attr("x2", function(d) { return d.target.x; })
+        .attr("y2", function(d) { return d.target.y; });
+
+    gnodes.attr("transform", function(d) {
+        return 'translate(' + [d.x, d.y] + ')';
+    });
+
+});
+
+function mouseover(d) {
+
+    d3.select(this).transition()
+        .duration(750)
+        .attr("r", function(o) { return o.size * 20; });
+
+    nodeLabels.style(
+        "display", function(o) { return o === d ? 'block' : 'none'; });
+
+}
+
+
+function mouseclick(d) {
+    console.log("Node clicked:" + d.name);
+}
+
+
+function mouseout() {
+
+    d3.select(this).transition()
+        .duration(750)
+        .attr("r", function(d) { return d.size * 15; })
+
+    nodeLabels.style("display", "none");
+
+}
+
+</script>
+
+
+
+
+<h4>{{=T('Debugging')}}</h4>
+<p>Number of visits: {{=session_counter}}</p>
+<p>Toolbar</p>
+<div>
+{{=response.toolbar()}}
+</div>
+
+{{elif 'content' in globals():}}
+{{=content}}
+{{else:}}
+{{=BEAUTIFY(response._vars)}}
+{{pass}}
+
+{{block right_sidebar}}
+{{=A(T("Administrative Interface"), _href=URL('admin','default','index'), _class='btn', _style='margin-top: 1em;')}}
+<h6>{{=T("Useful Links")}}</h6>
+<ul>
+  <li><a href="http://dsr.cise.ufl.edu">Data Science Research (DSR) Lab</a></li>
+</ul>
+{{end}}
