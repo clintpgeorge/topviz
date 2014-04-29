@@ -5,8 +5,7 @@
 ## Customize your APP title, subtitle and menus here
 #########################################################################
 
-response.logo = A(B('TopViz'),XML('&trade;&nbsp;'),
-                  _class="brand",_href="#")
+response.logo = A(B('TopViz'),XML('&trade;&nbsp;'), _class="brand",_href="#")
 response.title = 'Topic Visulization Tool' # request.application.replace('_',' ').title()
 response.subtitle = ''
 
@@ -24,8 +23,7 @@ response.google_analytics_id = None
 #########################################################################
 
 response.menu = [
-    (T('Home'), False, URL('default', 'index'),
-     [(T('Index Data'), False, URL('default', '#'))]),
+    (T('Home'), False, URL('default', 'index')), # ,[(T('Index Data'), False, URL('default', '#'))]
     (T('About'), False, URL('default', '#'))
 ]
 

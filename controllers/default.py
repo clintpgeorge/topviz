@@ -19,6 +19,8 @@ def index():
     return auth.wiki()
     """
     response.flash = T("Welcome to TopViz!")
+    response.title = T("Category Hierarchy")
+    response.subtitle = T('Whales')
     session.counter = (session.counter or 0) + 1
 
     filetable = TABLE(*[TR(TD(f["pageid"]), TD(f["title"])) for f in file_details])
@@ -32,20 +34,75 @@ def visualizepage():
     """
     Visualizes a page using a D3 bubble chart
     """
-    response.flash = T("Welcome to Page Viz!")
-    p = ""
-    if len(request.vars) > 0:
+    p = None
+    docid = None
+    if len(request.vars) >= 2:
         p = request.vars['p']
         docid = int(request.vars['docid'])
+    else:
+        redirect(URL('index'))
 
-        pagepath = join(request.folder, 'private', 'data', p)
-        doc = documents[docid]
+    pageurl = wiki_url + p
+    pagepath = join(request.folder, 'private', 'data', 'pages', slugify(p) + '.html')
+    doc_bubble_data = {"name": "TF", "children":doc_nodes[docid]}
+    # word_topics = doc_word_topics[docid]
 
-    return dict(message=T("Page Visualization"),
-            session_counter=session.counter,
+    response.flash = T("Welcome to " + p)
+    response.title = p
+    response.subtitle = 'Word and Topic Distribution'
+
+    page_html = ""
+    with open(pagepath) as fp:
+        page_html = fp.read()
+
+    doc_pie_data = [{"label":lda_topic_labels[j], "value":value, "tid":j}
+                    for j, value in enumerate(lda_theta[:, docid]/ np.sum(lda_theta[:, docid]))
+                    if value > MIN_DISPLAY_TOPIC_PROB_VALUE]
+    words_prob = []
+    for t in range(0, vocab_count):
+        words_prob.append([{"label":lda_topic_labels[j], "value":value, "tid":j}
+                          for j, value in enumerate(lda_beta[:, t] / np.sum(lda_beta[:, t]))])
+
+    return dict(session_counter=session.counter,
             pagetitle=p,
-            pagepath=pagepath,
-            doc=doc)
+            page_html=page_html,
+            doc_bubble_data=doc_bubble_data,
+            pageurl=pageurl,
+            words_prob=words_prob,
+            doc_pie_data=doc_pie_data)
+
+@auth.requires_login()
+def visualizetopic():
+    """
+    Visualizes a topic distribution in word cloud
+    """
+    topic_label = None
+    tid = None
+    if len(request.vars) >= 2:
+        topic_label = request.vars['cat']
+        tid = int(request.vars['tid'])
+    else:
+        redirect(URL('index'))
+
+    response.flash = T("Welcome to " + topic_label)
+    response.title = topic_label
+    response.subtitle = 'Topic Distribution'
+
+    topic_wc_data = [{"text":vocabnames[j], "size":(value * 2000), "wid":j, "value":value}
+                     for j, value in enumerate(lda_beta[tid, :] / np.sum(lda_beta[tid, :]))
+                     if value > MIN_DISPLAY_WORD_PROB_VALUE]
+
+    max_prob_wid = np.argmax(lda_beta[tid, :].tolist())
+    max_prob_word = vocabnames[max_prob_wid];
+
+    word_prob = []
+    for t in range(0, vocab_count):
+        word_prob.append([{"label":lda_topic_labels[j], "value":value, "tid":j}
+                          for j, value in enumerate(lda_beta[:, t] / np.sum(lda_beta[:, t]))
+                          if value > MIN_DISPLAY_TOPIC_PROB_VALUE])
+
+    return dict(topic_wc_data=topic_wc_data, word_prob=word_prob,
+                max_prob_wid=max_prob_wid, max_prob_word=max_prob_word)
 
 
 def user():
@@ -101,7 +158,7 @@ def data():
     """
     return dict(form=crud())
 
-
+'''
 @auth.requires_login()
 def indexdata():
     """
@@ -157,3 +214,4 @@ def lucenesearchresults():
     response.flash = T("Welcome to Lucene Seach Results!")
 
     return dict(message=T("Lucene Search Results"), session_counter=session.counter)
+'''

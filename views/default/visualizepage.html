@@ -1,101 +1,318 @@
-{{left_sidebar_enabled,right_sidebar_enabled=False,('message' in globals())}}
 {{extend 'layout.html'}}
 
-{{if 'message' in globals():}}
-<h3>{{=message}}</h3>
-<form>
-    <table border=0>
+<!--form-->
+    <table border = "0" width = "100%">
         <tr>
-        <td valign="top"><svg style="width: 1024; height: 768;"></svg></td>
+            <td valign = "top" align="center"><svg style = "width: 100%; height: 500;" id = "doc-bubble-chart"></svg></td>
+        </tr>
+        <tr>
+            <td align = "center">
+                <div style = "text-align: center;">
+                    <b>{{=pagetitle}}</b>'s term frequencies
+                </div>
+            </td>
         </tr>
     </table>
+    <hr/>
+    <table border = "0" width = "100%">
+        <tr>
+            <td valign = "top" align="center"><svg style = "width: 100%; height: 300;" id = "doc-pie-chart"></svg></td>
+        </tr>
+        <tr>
+            <td align = "center">
+                <div style = "text-align: center;">
+                    <b>{{=pagetitle}}</b>'s topic distribution (from Latent Dirichlet Allocation)
+                </div>
+                <div style = "text-align: center;">
+                    <button class="reset">Reset</button>
+                </div>
+            </td>
+        </tr>
+
+    </table>
+    <hr/>
+    <h1>
+        {{=pagetitle}}
+    </h1>
+    <div style = "text-align: left;">
+        <i>Please click <a href='{{=pageurl}}' target="_blank">here</a> to see the original Wikipedia page.</i>
+    </div>
     <br/>
-</form>
+    {{=XML(page_html)}}
+<!--/form-->
+
 
 <script>
+    // --------------------------------------------- Handle Text ----------------------------------------------
+    var vocab = {{=XML(response.json(vocab))}};
+    var words_prob = {{=XML(response.json(words_prob))}};
 
-var diameter = 960,
-    format = d3.format(",d"),
+    function MouseOverParagraph(){
+        d3.select(this).style("font-weight","bold");
+    }
+    function MouseOutParagraph(){
+        d3.select(this).style("font-weight","normal");
+    }
+    function isVocab(element) {
+        if (vocab.indexOf(element) > -1)
+            return true;
+        else
+            return false;
+    }
+    function MouseClickParagraph(){
+        para_text = d3.select(this).text();
+        para_tokens = para_text.match(/\w+/g).filter(isVocab);
+        var avg = words_prob[0];
+        for (var i = 0; i < avg.length; i++){
+            avg[i].value = 0.0;
+        }
+        // console.log(avg);
+        for (var i = 0; i < para_tokens.length; i++){
+            vocab_id = vocab.indexOf(para_tokens[i]);
+            var wp = words_prob[vocab_id];
+            for (var j = 0; j < avg.length; j++){
+                avg[j].value += wp[j].value / para_tokens.length;
+            }
+        }
+        // console.log(avg);
+        change(avg);
+    }
+    var div_page_text = d3.select("div#pagetext");
+    div_page_text.selectAll("div")
+        .on("mouseover", MouseOverParagraph)
+        .on("mouseout", MouseOutParagraph)
+        .on("click", MouseClickParagraph);
+
+    // --------------------------------------------- Bubble Chart ----------------------------------------------
+    // selects the existing svg objects in the page
+    var svg_bubble_chart = d3.select("svg#doc-bubble-chart");
+
+    // variables specific to the Bubble chart
+
+    // gets the JSON object miserable from the server side
+    var bubbledata = {{=XML(response.json(doc_bubble_data))}};
+
+    var bc_width = parseFloat(svg_bubble_chart.style("width"));
+    var bc_height = parseFloat(svg_bubble_chart.style("height"));
+
+    var format = d3.format(",d");
+    var bc_color = d3.scale.category20c();
+    var bubble = d3.layout.pack()
+        .sort(null)
+        .size([bc_width, bc_height])
+        .padding(1.5);
+
+    svg_bubble_chart.attr("class", "bubble");
+
+    var node = svg_bubble_chart.selectAll(".node")
+        .data(bubble.nodes(classes(bubbledata))
+        .filter(function(d) { return !d.children; }))
+        .enter().append("g")
+        .attr("class", "node")
+        .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+
+    node.append("title")
+      .text(function(d) { return d.className + ": " + format(d.value); });
+
+    node.append("circle")
+      .attr("r", function(d) { return d.r; })
+      .style("fill", function(d) { return bc_color(d.packageName); })//;
+        .on("mouseover", function(d) {
+            d3.select(this).style("stroke","black");
+         })
+        .on("mouseout",function() {
+            d3.select(this).style("stroke",null);
+        });
+    node.append("text")
+      .attr("dy", ".3em")
+      .style("text-anchor", "middle")
+      .text(function(d) { return d.className.substring(0, d.r / 3); })
+      .attr("font", "7px");
+
+
+    // Returns a flattened hierarchy containing all leaf nodes under the root.
+    function classes(root) {
+      var classes = [];
+
+      function recurse(name, node) {
+        if (node.children) node.children.forEach(function(child) { recurse(node.name, child); });
+        else classes.push({packageName: name, className: node.name, value: node.size});
+      }
+
+      recurse(null, root);
+      return {children: classes};
+    }
+
+
+
+    // --------------------------------------------- Pie Chart ----------------------------------------------
+    // selects the existing svg objects in the page
+    var svg_pie_chart = d3.select("svg#doc-pie-chart");
+
+    // gets the JSON object miserable from the server side
+    var pie_data = {{=XML(response.json(doc_pie_data))}};
+    var MIN_PROB_VALUE = 0.001;
+
+    var pc_width = parseFloat(svg_pie_chart.style("width"));
+    var pc_height = parseFloat(svg_pie_chart.style("height"));
+    var pc_radius = Math.min(pc_width, pc_height) / 2;
+
+    svg_pie_chart.append("g");
+    svg_pie_chart.append("g").attr("class", "slices").attr("transform", "translate(" + pc_width / 2 + "," + pc_height / 2 + ")");
+    svg_pie_chart.append("g").attr("class", "labels").attr("transform", "translate(" + pc_width / 2 + "," + pc_height / 2 + ")");
+    svg_pie_chart.append("g").attr("class", "lines").attr("transform", "translate(" + pc_width / 2 + "," + pc_height / 2 + ")");
+
+    var pie = d3.layout.pie()
+        .sort(null)
+        .value(function(d) {
+            return d.value;
+        });
+
+    var arc = d3.svg.arc()
+        .outerRadius(pc_radius * 0.8)
+        .innerRadius(pc_radius * 0.4);
+
+    var outerArc = d3.svg.arc()
+        .innerRadius(pc_radius * 0.9)
+        .outerRadius(pc_radius * 0.9);
+
+    var key = function(d){ return d.data.label; };
+
     color = d3.scale.category20c();
 
-var bubble = d3.layout.pack()
-    .sort(null)
-    .size([diameter, diameter])
-    .padding(1.5);
+    d3.select(".reset")
+	.on("click", function(){
+		change(pie_data);
+	});
 
-// selects the existing svg object in the page
-var svg = d3.select("svg")
-    .attr("width", diameter)
-    .attr("height", diameter)
-    .attr("class", "bubble");
-
-// var svg = d3.select("body").append("svg")
-//     .attr("width", diameter)
-//     .attr("height", diameter)
-//     .attr("class", "bubble");
-
-// gets the JSON object miserable from the server side
-var root = {{=XML(response.json(bubbledata))}};
+    change(pie_data);
 
 
-var node = svg.selectAll(".node")
-  .data(bubble.nodes(classes(root))
-  .filter(function(d) { return !d.children; }))
-.enter().append("g")
-  .attr("class", "node")
-  .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+    function change(data) {
 
-node.append("title")
-  .style('font-size', 10)
-  .text(function(d) { return d.className + ": " + format(d.value); });
+        /* ------- PIE SLICES -------*/
+        var div = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0)
+            .style("width", "40px")
+            .style("height", "20px");
 
-node.append("circle")
-  .attr("r", function(d) { return d.r; })
-  .style("fill", function(d) { return color(d.packageName); });
+        function SliceMouseClick(d) {
+            console.log("Mouse Click");
+            // console.log(lda_beta[d.data.tid]);
+            var win = window.open("{{=URL('visualizetopic')}}?cat=" + d.data.label + "&tid=" + d.data.tid, "_blank");
+            return win;
+        }
 
-node.append("text")
-  .attr("dy", ".3em")
-  .style("text-anchor", "middle")
-  .style('font', "10px sans-serif;")
-  .text(function(d) { return d.className.substring(0, d.r / 3); });
+        var slice = svg_pie_chart
+            .select(".slices")
+            .selectAll("path.slice")
+            .data(pie(data), key);
+
+        slice.enter()
+            .insert("path")
+            .style("fill", function(d) { return color(d.data.value); })
+            .attr("class", "slice")
+            .on("click", SliceMouseClick)
+            .on("mouseover", function(d) {
+                d3.select(this).style("stroke","black");
+                div.transition()
+                    .duration(200)
+                    .style("opacity", .9);
+                div.html((d.data.value * 100.).toFixed(2) + "%")
+                    .style("left", (d3.event.pageX) + "px")
+                    .style("top", (d3.event.pageY - 28) + "px");
+             })
+            .on("mouseout",function() {
+                d3.select(this).style("stroke",null);
+                div.transition()
+                    .duration(500)
+                    .style("opacity", 0);
+            });
+
+        slice.transition().duration(1000)
+            .attrTween("d", function(d) {
+                this._current = this._current || d;
+                var interpolate = d3.interpolate(this._current, d);
+                this._current = interpolate(0);
+                return function(t) {
+                    return arc(interpolate(t));
+                };
+            })
+
+        slice.exit()
+            .remove();
+
+        /* ------- TEXT LABELS -------*/
+
+        var text = svg_pie_chart
+            .select(".labels")
+            .selectAll("text")
+            .data(pie(data), key);
+
+        text.enter()
+            .append("text")
+            .attr("dy", ".35em")
+            .text(function(d) {
+                return d.data.label;
+            });
+
+        function midAngle(d){
+            return d.startAngle + (d.endAngle - d.startAngle)/2;
+        }
+
+        text.transition().duration(1000)
+            .attrTween("transform", function(d) {
+                this._current = this._current || d;
+                var interpolate = d3.interpolate(this._current, d);
+                this._current = interpolate(0);
+                return function(t) {
+                    var d2 = interpolate(t);
+                    var pos = outerArc.centroid(d2);
+                    pos[0] = pc_radius * (midAngle(d2) < Math.PI ? 1 : -1);
+                    return "translate("+ pos +")";
+                };
+            })
+            .styleTween("text-anchor", function(d){
+                this._current = this._current || d;
+                var interpolate = d3.interpolate(this._current, d);
+                this._current = interpolate(0);
+                return function(t) {
+                    var d2 = interpolate(t);
+                    return midAngle(d2) < Math.PI ? "start":"end";
+                };
+            });
+
+        text.exit()
+            .remove();
+
+        /* ------- SLICE TO TEXT POLYLINES -------*/
+
+        var polyline = svg_pie_chart
+            .select(".lines")
+            .selectAll("polyline")
+            .data(pie(data), key);
+
+        polyline.enter()
+            .append("polyline");
+
+        polyline.transition().duration(1000)
+            .attrTween("points", function(d){
+                this._current = this._current || d;
+                var interpolate = d3.interpolate(this._current, d);
+                this._current = interpolate(0);
+                return function(t) {
+                    var d2 = interpolate(t);
+                    var pos = outerArc.centroid(d2);
+                    pos[0] = pc_radius * 0.95 * (midAngle(d2) < Math.PI ? 1 : -1);
+                    return [arc.centroid(d2), outerArc.centroid(d2), pos];
+                };
+            });
+
+        polyline.exit()
+            .remove();
+    };
 
 
-// Returns a flattened hierarchy containing all leaf nodes under the root.
-function classes(root) {
-  var classes = [];
-
-  function recurse(name, node) {
-    if (node.children) node.children.forEach(function(child) { recurse(node.name, child); });
-    else classes.push({packageName: name, className: node.name, value: node.size});
-  }
-
-  recurse(null, root);
-  return {children: classes};
-}
-
-d3.select(self.frameElement).style("height", diameter + "px");
-
+    d3.select(self.frameElement).style("height", bc_height + "px");
 </script>
-
-
-
-Page title: {{=pagetitle}}
-
-Page path: {{=pagepath}}
-
-Page counts: {{=doc}}
-
-{{elif 'content' in globals():}}
-{{=content}}
-{{else:}}
-{{=BEAUTIFY(response._vars)}}
-{{pass}}
-
-{{block right_sidebar}}
-{{=A(T("Administrative Interface"), _href=URL('admin','default','index'), _class='btn', _style='margin-top: 1em;')}}
-<h6>{{=T("Useful Links")}}</h6>
-<ul>
-  <li><a href="http://www.law.ufl.edu/academics/institutes/icair">UF Law E-Discovery Project</a></li>
-  <li><a href="http://dsr.cise.ufl.edu">Data Science Research (DSR) Lab</a></li>
-</ul>
-{{end}}

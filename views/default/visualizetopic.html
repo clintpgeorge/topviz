@@ -1,0 +1,268 @@
+{{extend 'layout.html'}}
+<script src="{{=URL('static','js/d3.layout.cloud.js')}}"></script>
+<form>
+    <table border = "0" width = "100%">
+        <tr>
+            <td valign = "top"><svg style = "width: 100%; height: 450;" id = "topic-word-cloud"></svg></td>
+        </tr>
+        <tr>
+            <td align = "center">
+                <div style = "text-align: center;">
+                    High probable words are larger in size and less proabable words are smaller in size.
+                </div>
+            </td>
+        </tr>
+    </table>
+    <hr/>
+    <table border = "0" width = "100%">
+        <tr>
+            <td valign = "top"><svg style = "width: 100%; height: 300;" id = "word-pie-chart"></svg></td>
+            <!--td valign = "top"><svg style = "width: 50%; height: 300;" id = "word-bar-chart"></svg></td-->
+        </tr>
+        <tr>
+            <td align = "center" valign = "top">
+                <div style = "text-align: center;" id = "select-wlabel">
+                    Word's distribution
+                </div>
+            </td>
+        </tr>
+    </table>
+</form>
+<script>
+    // selects the existing svg objects in the page
+    var svg_topic_word_cloud = d3.select("svg#topic-word-cloud");
+    var wc_width = parseFloat(svg_topic_word_cloud.style("width"));
+    var wc_height = parseFloat(svg_topic_word_cloud.style("height"));
+    var wc_center_xcord = wc_width / 2;
+    var wc_center_ycord = wc_height / 2;
+    var topic_wc_data = {{=XML(response.json(topic_wc_data))}};
+    var word_prob = {{=XML(response.json(word_prob))}};
+
+    var fill = d3.scale.category20();
+    var tooltip_div = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0)
+        .style("width", "40px")
+        .style("height", "20px");
+    var selected_word_div = d3.select("div#select-wlabel");
+
+	d3.layout
+		.cloud()
+		.size([wc_width, wc_height])
+        .words(topic_wc_data) // adds the topic word data
+		.padding(5)
+		.rotate(function() { return ~~(Math.random() * 2) * 90; })
+		.font("Impact")
+		.fontSize(function(d) { return d.size; })
+		.on("end", draw)
+		.start();
+
+    function WordMouseClick(d){
+        // console.log("Word: Mouse Click");
+        // console.log(word_prob[d.wid]);
+        selected_word_div.html("The selected word <b><i>" + d.text + "</i></b>'s topic distribution");
+        change(word_prob[d.wid]);
+    }
+
+	function draw(words) {
+		svg_topic_word_cloud
+			.append("g")
+			.attr("transform", "translate(" + wc_center_xcord + "," + wc_center_ycord + ")")
+			.selectAll("text")
+			.data(words)
+			.enter().append("text")
+			.style("font-size", function(d) { return d.size + "px"; })
+			.style("font-family", "Impact")
+			.style("fill", function(d, i) { return fill(i); })
+			.attr("text-anchor", "middle")
+			.attr("transform", function(d) {
+				return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
+			})
+			.text(function(d) { return d.text; })//;
+            .on("click", WordMouseClick)
+            .on("mouseover", function(d) {
+                d3.select(this).style("stroke","black");
+                tooltip_div.transition()
+                    .duration(200)
+                    .style("opacity", .9);
+                tooltip_div.html((d.value * 100.).toFixed(2) + "%")
+                    .style("left", (d3.event.pageX) + "px")
+                    .style("top", (d3.event.pageY - 28) + "px");
+             })
+            .on("mouseout",function() {
+                d3.select(this).style("stroke",null);
+                tooltip_div.transition()
+                    .duration(200)
+                    .style("opacity", 0);
+            });
+	}
+
+    // --------------------------------------------- Pie Chart ----------------------------------------------
+
+    // selects the existing svg objects in the page
+    var svg_word_pie_chart = d3.select("svg#word-pie-chart");
+    var pc_width = parseFloat(svg_word_pie_chart.style("width"));
+    var pc_height = parseFloat(svg_word_pie_chart.style("height"));
+    var pc_radius = Math.min(pc_width, pc_height) / 2;
+    var max_prob_wid = {{=max_prob_wid}};
+    var max_prob_word = {{=XML(response.json(max_prob_word))}};
+
+    svg_word_pie_chart.append("g");
+    svg_word_pie_chart.append("g").attr("class", "slices").attr("transform", "translate(" + pc_width / 2 + "," + pc_height / 2 + ")");
+    svg_word_pie_chart.append("g").attr("class", "labels").attr("transform", "translate(" + pc_width / 2 + "," + pc_height / 2 + ")");
+    svg_word_pie_chart.append("g").attr("class", "lines").attr("transform", "translate(" + pc_width / 2 + "," + pc_height / 2 + ")");
+
+
+
+    var pie = d3.layout.pie()
+        .sort(null)
+        .value(function(d) {
+            return d.value;
+        });
+
+    var arc = d3.svg.arc()
+        .outerRadius(pc_radius * 0.8)
+        .innerRadius(pc_radius * 0.4);
+
+    var outerArc = d3.svg.arc()
+        .innerRadius(pc_radius * 0.9)
+        .outerRadius(pc_radius * 0.9);
+
+    var key = function(d){ return d.data.label; };
+
+    var div = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0)
+        .style("width", "40px")
+        .style("height", "20px");
+
+    color = d3.scale.category20c();
+
+    // Initialize the Pie chart with max probable word's topic distribution 
+    pie_data = word_prob[max_prob_wid];
+    selected_word_div.html("The most probable word <b><i>" + max_prob_word + "</i></b>'s topic distribution");
+    change(pie_data);
+
+
+
+    function change(data) {
+
+        /* ------- PIE SLICES -------*/
+
+        function SliceMouseClick(d) {
+            // console.log("Pie Slice: Mouse Click");
+            var win = window.open("{{=URL('visualizetopic')}}?cat=" + d.data.label + "&tid=" + d.data.tid,'_self');
+            return win;
+        }
+
+        var slice = svg_word_pie_chart
+            .select(".slices")
+            .selectAll("path.slice")
+            .data(pie(data), key);
+
+        slice.enter()
+            .insert("path")
+            .style("fill", function(d) { return color(d.data.value); })
+            .attr("class", "slice")
+            .on("click", SliceMouseClick)
+            .on("mouseover", function(d) {
+                d3.select(this).style("stroke","black");
+                div.transition()
+                    .duration(200)
+                    .style("opacity", .9);
+                div.html((d.data.value * 100.).toFixed(2) + "%")
+                    .style("left", (d3.event.pageX) + "px")
+                    .style("top", (d3.event.pageY - 28) + "px");
+             })
+            .on("mouseout",function() {
+                d3.select(this).style("stroke",null);
+                div.transition()
+                    .duration(500)
+                    .style("opacity", 0);
+            });
+
+        slice.transition().duration(1000)
+            .attrTween("d", function(d) {
+                this._current = this._current || d;
+                var interpolate = d3.interpolate(this._current, d);
+                this._current = interpolate(0);
+                return function(t) {
+                    return arc(interpolate(t));
+                };
+            })
+
+        slice.exit()
+            .remove();
+
+        /* ------- TEXT LABELS -------*/
+
+        var text = svg_word_pie_chart
+            .select(".labels")
+            .selectAll("text")
+            .data(pie(data), key);
+
+        text.enter()
+            .append("text")
+            .attr("dy", ".35em")
+            .text(function(d) {
+                return d.data.label;
+            })
+            .style("font-size", 12);
+
+        function midAngle(d){
+            return d.startAngle + (d.endAngle - d.startAngle)/2;
+        }
+
+        text.transition().duration(1000)
+            .attrTween("transform", function(d) {
+                this._current = this._current || d;
+                var interpolate = d3.interpolate(this._current, d);
+                this._current = interpolate(0);
+                return function(t) {
+                    var d2 = interpolate(t);
+                    var pos = outerArc.centroid(d2);
+                    pos[0] = pc_radius * (midAngle(d2) < Math.PI ? 1 : -1);
+                    return "translate("+ pos +")";
+                };
+            })
+            .styleTween("text-anchor", function(d){
+                this._current = this._current || d;
+                var interpolate = d3.interpolate(this._current, d);
+                this._current = interpolate(0);
+                return function(t) {
+                    var d2 = interpolate(t);
+                    return midAngle(d2) < Math.PI ? "start":"end";
+                };
+            });
+
+        text.exit()
+            .remove();
+
+        /* ------- SLICE TO TEXT POLYLINES -------*/
+
+        var polyline = svg_word_pie_chart
+            .select(".lines")
+            .selectAll("polyline")
+            .data(pie(data), key);
+
+        polyline.enter()
+            .append("polyline");
+
+        polyline.transition().duration(1000)
+            .attrTween("points", function(d){
+                this._current = this._current || d;
+                var interpolate = d3.interpolate(this._current, d);
+                this._current = interpolate(0);
+                return function(t) {
+                    var d2 = interpolate(t);
+                    var pos = outerArc.centroid(d2);
+                    pos[0] = pc_radius * 0.95 * (midAngle(d2) < Math.PI ? 1 : -1);
+                    return [arc.centroid(d2), outerArc.centroid(d2), pos];
+                };
+            });
+
+        polyline.exit()
+            .remove();
+    };
+
+</script>
