@@ -1,0 +1,145 @@
+Setting web2py in Apache 
+
+
+************************************ Apache Setup ************************************
+
+In this section, we use Ubuntu Server Edition as the reference platform. The configuration commands are very similar on other Debian-based Linux distribution, but they may differ for Fedora-based systems (which uses yum instead of apt-get). You can use either 2.2.x or 2.4.x
+First, make sure all the necessary Python and Apache packages are installed by typing the following shell commands:
+
+sudo apt-get update
+sudo apt-get -y upgrade
+sudo apt-get -y install openssh-server
+sudo apt-get -y install python
+sudo apt-get -y install python-dev
+sudo apt-get -y install apache2
+sudo apt-get -y install libapache2-mod-wsgi
+sudo apt-get -y install libapache2-mod-proxy-html
+
+Then, enable the SSL module, the proxy module, and the WSGI module in Apache:
+
+sudo ln -s /etc/apache2/mods-available/proxy_http.load /etc/apache2/mods-enabled/proxy_http.load
+sudo a2enmod ssl
+sudo a2enmod proxy
+sudo a2enmod proxy_http
+sudo a2enmod wsgi
+
+Create the SSL folder, and put the SSL certificates inside it:
+sudo mkdir /etc/apache2/ssl
+
+You should obtain your SSL certificates from a trusted Certificate Authority such as verisign.com, but, for testing purposes, you can generate your own self-signed certificates following the instructions in Section [Open SSL]
+
+
+Then restart the web server:
+sudo /etc/init.d/apache2 restart
+
+The Apache configuration file is:
+/etc/apache2/sites-available/default
+
+The Apache logs are in:
+/var/log/apache2/
+
+
+************************************ mod_wsgi *********************************
+
+
+Download and unzip web2py source on the machine where you installed the web server above.
+Install web2py under /var/www-data/ (or any folder), for example, and give ownership to user www-data and group www-data. These steps can be performed with the following shell commands:
+
+cd /var/www-data/
+sudo wget http://web2py.com/examples/static/web2py_src.zip
+sudo unzip web2py_src.zip
+sudo chown -R www-data:www-data web2py
+
+To set up web2py with mod_wsgi, create a new Apache configuration file:
+/etc/apache2/sites-available/web2py
+This didn't work for me. 
+
+So I modified /etc/apache2/sites-available/default (See the file web2py)
+
+
+*********************************** Move the handler script *******************
+
+Finally, you need to relocate the handler script web2py/handlers/wsgihandler.py. As documented in the handlers directory, the script you want should be moved or copied to the parent directory (i.e. the same directory as the web2py.py script). symlinking may cause apache permission problems.
+
+sudo chown -R www-data:www-data wsgihandler.py
+
+*********************************** Setting password **************************
+
+In production it may be necessary to set the admin password programmatically. This can be done from the Bash shell with
+sudo -u www-data python -c "from gluon.main import save_password; save_password(raw_input('admin password: '),443)"
+
+The same password that's used for the SSL certificate 
+
+
+
+
+************************************** routes.py ******************************
+
+Add routes.py in the web2py root folder 
+ 
+routers = dict( 
+ BASE = dict( 
+ default_application='<your_default_app>', 
+path_prefix='web2py', 
+ ) 
+)
+
+************************************** Open SSL *******************************
+
+How to create a self-signed SSL Certificate
+===========================================
+http://www.akadia.com/services/ssh_test_certificate.html
+
+Step 1: Generate a Private Key
+
+The openssl toolkit is used to generate an RSA Private Key and CSR (Certificate Signing Request). It can also be used to generate self-signed certificates which can be used for testing purposes or internal usage.
+
+The first step is to create your RSA Private Key. This key is a 1024 bit RSA key which is encrypted using Triple-DES and stored in a PEM format so that it is readable as ASCII text.
+
+openssl genrsa -out server.key 2048
+
+Generating RSA private key, 2048 bit long modulus
+.................................................+++
+...................................+++
+e is 65537 (0x10001)
+
+
+Step 2: Generate a CSR (Certificate Signing Request)
+
+Once the private key is generated a Certificate Signing Request can be generated. The CSR is then used in one of two ways. Ideally, the CSR will be sent to a Certificate Authority, such as Thawte or Verisign who will verify the identity of the requestor and issue a signed certificate. The second option is to self-sign the CSR, which will be demonstrated in the next section.
+
+During the generation of the CSR, you will be prompted for several pieces of information. These are the X.509 attributes of the certificate. One of the prompts will be for "Common Name (e.g., YOUR name)". It is important that this field be filled in with the fully qualified domain name of the server to be protected by SSL. If the website to be protected will be https://public.akadia.com, then enter public.akadia.com at this prompt. The command to generate the CSR is as follows:
+
+openssl req -new -key server.key -out server.csr
+
+
+Country Name (2 letter code) [GB]:CH
+State or Province Name (full name) [Berkshire]:Bern
+Locality Name (eg, city) [Newbury]:Oberdiessbach
+Organization Name (eg, company) [My Company Ltd]:Akadia AG
+Organizational Unit Name (eg, section) []:Information Technology
+Common Name (eg, your name or your server's hostname) []:public.akadia.com
+Email Address []:martin dot zahn at akadia dot ch
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:
+An optional company name []:
+
+Step 4: Generating a Self-Signed Certificate
+
+At this point you will need to generate a self-signed certificate because you either don't plan on having your certificate signed by a CA, or you wish to test your new SSL implementation while the CA is signing your certificate. This temporary certificate will generate an error in the client browser to the effect that the signing certificate authority is unknown and not trusted.
+
+To generate a temporary certificate which is good for 365 days, issue the following command:
+
+openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt
+
+Signature ok
+subject=/C=CH/ST=Bern/L=Oberdiessbach/O=Akadia AG/OU=Information
+Technology/CN=public.akadia.com/Email=martin dot zahn at akadia dot ch
+Getting Private key
+
+************************************** mod_wsgi and SSL *******************************
+
+To force some applications (for example admin and appadmin) to go over HTTPS, store the SSL certificate and key files:
+/etc/apache2/ssl/server.crt
+/etc/apache2/ssl/server.key
