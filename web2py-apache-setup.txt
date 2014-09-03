@@ -143,3 +143,10 @@ Getting Private key
 To force some applications (for example admin and appadmin) to go over HTTPS, store the SSL certificate and key files:
 /etc/apache2/ssl/server.crt
 /etc/apache2/ssl/server.key
+
+************************************** For errors and logs *******************************
+See 
+cat /var/log/apache2/error.log
+cat /var/log/apache2/access.log
+
+Look at the files at /etc/apache2/sites-available
