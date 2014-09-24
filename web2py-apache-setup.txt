@@ -148,5 +148,6 @@ To force some applications (for example admin and appadmin) to go over HTTPS, st
 See 
 cat /var/log/apache2/error.log
 cat /var/log/apache2/access.log
+cat /var/www-data/web2py/httpserver.log
 
 Look at the files at /etc/apache2/sites-available
